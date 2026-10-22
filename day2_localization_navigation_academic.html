@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 2 · Localization &amp; Navigation (hands-on)</title>
+<link rel="stylesheet" href="assets/lib/reveal/reset.css">
+<link rel="stylesheet" href="assets/lib/reveal/reveal.css">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/academic.css">
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ======================================================= TITLE -->
+<section class="title">
+  <div class="title-logos">
+    <img src="assets/logos/rrc_logo.png" alt="Robotics Research Center">
+    <span class="sep"></span>
+    <img src="assets/logos/iiit_hyderabad_logo.png" alt="IIIT Hyderabad">
+  </div>
+  <div class="event">Visual Navigation · Hands-on session</div>
+  <h1>Day 2 — Localization &amp; Navigation</h1>
+  <div class="sub">Where am I in the map? (PnP, P3P, hloc) · How do I get there? (A*, RRT*, OMPL, topological graphs)</div>
+  <div class="rule"></div>
+  <div class="author">Akash S Kumbar</div>
+  <div class="affil">Robotics Research Center, IIIT Hyderabad</div>
+  <div class="meta">Colab notebooks in <code>notebooks/day2_*.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">The next 45 minutes</span>Plan</h2>
+  <table class="agenda" style="font-size:0.8em">
+    <tr><th>notebook</th><th>idea</th><th>you will see</th><th>min</th></tr>
+    <tr><td>day2_01_p3p_pnp</td><td>pose from 2D–3D matches, P3P from scratch, RANSAC</td><td>4 poses that fit 3 points</td><td>15</td></tr>
+    <tr><td>day2_02_hloc_localization</td><td>retrieval → local matching → PnP</td><td>a night photo localised in a day map</td><td>15</td></tr>
+    <tr><td>day2_03_planning_ompl</td><td>C-space, A*, PRM / RRT / RRT*, topological graph</td><td>paths in Day 1's lounge map</td><td>15</td></tr>
+  </table>
+  <p class="small">Notebook 2 is faster on a GPU runtime (~1 min) but also runs on CPU (~5 min). Start its install cell early.</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Two meanings of "where am I?"</span>Localisation in a map</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.78em">
+      <div class="defn"><h4>Metric (6-DoF) localisation</h4>
+      Map = 3D points (SfM / SLAM). Answer = camera pose \((R, \mathbf{t})\) in map coordinates.<br>
+      <strong>2D–3D matches + PnP.</strong>
+      </div>
+      <div class="defn"><h4>Topological localisation</h4>
+      Map = graph of places / images. Answer = <em>which node am I at?</em><br>
+      <strong>Visual place recognition</strong> (image retrieval).
+      </div>
+    </div>
+    <div><img class="fig h460" src="assets/papers/hloc_pipeline.png">
+    <div class="figcap"><span class="fignum">Fig. 1.</span> Hierarchical localisation does both: retrieval first (coarse), then 2D–3D + PnP (fine). Figure: Sarlin et al., <i>From Coarse to Fine</i>, CVPR 2019 (github.com/cvg/Hierarchical-Localization).</div></div>
+  </div>
+</section>
+
+<!-- ======================================================= 1 PnP -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 1 of 3</span>PnP and the P3P solver</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li class="current">PnP and the P3P solver</li>
+    <li>Visual localisation with hloc</li>
+    <li>Navigation: planning in the map we built</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>Perspective-n-Point</li>
+    <li>Three rays, one triangle</li>
+    <li>Up to four poses fit three points</li>
+    <li>Many noisy points, many outliers</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day2_01_p3p_pnp.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">Problem</span>Perspective-n-Point</h2>
+  <div class="cols w-6-4">
+    <div style="font-size:0.8em">
+      <p>Given \(n\) map points \(\mathbf{X}_j\), their pixels \(\mathbf{x}_j\), and \(K\), find \(R, \mathbf{t}\):</p>
+      $$\lambda_j\,\tilde{\mathbf{x}}_j = K\,(R\,\mathbf{X}_j + \mathbf{t})$$
+      <ul>
+        <li>unknowns: <strong>6</strong> (3 rotation + 3 translation)</li>
+        <li>each correspondence: <strong>2</strong> equations</li>
+        <li>minimal case: <strong>3 points → P3P</strong> (Grunert, 1841)</li>
+        <li>linear DLT needs 6 points (it ignores that \(R\) is a rotation)</li>
+      </ul>
+    </div>
+    <div class="sidebar" style="font-size:0.7em">
+      <h4>You already used it</h4>
+      <ul>
+        <li>VO tracking (Day 1, notebook 2)</li>
+        <li>COLMAP image registration (notebook 5)</li>
+        <li>ORB-SLAM relocalisation</li>
+        <li>AR on your phone</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">P3P geometry</span>Three rays, one triangle</h2>
+  <div class="cols w-4-6">
+    <svg viewBox="0 0 480 420" width="100%" height="480">
+      <g font-size="20">
+        <polygon points="300,60 440,170 330,250" fill="#f8f5f3" stroke="#b0632f" stroke-width="1.6"/>
+        <circle cx="300" cy="60" r="8" fill="#1f2328"/><text x="310" y="50" font-weight="600">X₁</text>
+        <circle cx="440" cy="170" r="8" fill="#1f2328"/><text x="448" y="168" font-weight="600">X₂</text>
+        <circle cx="330" cy="250" r="8" fill="#1f2328"/><text x="338" y="275" font-weight="600">X₃</text>
+        <circle cx="60" cy="370" r="9" fill="#2e6f73"/><text x="30" y="405" fill="#2e6f73" font-weight="600">C</text>
+        <line x1="60" y1="370" x2="300" y2="60" stroke="#2e6f73" stroke-width="2"/>
+        <line x1="60" y1="370" x2="440" y2="170" stroke="#2e6f73" stroke-width="2"/>
+        <line x1="60" y1="370" x2="330" y2="250" stroke="#2e6f73" stroke-width="2"/>
+        <text x="150" y="220" fill="#2e6f73">s₁</text><text x="250" y="270" fill="#2e6f73">s₂</text><text x="190" y="330" fill="#2e6f73">s₃</text>
+        <text x="380" y="100" fill="#b0632f">c</text><text x="395" y="225" fill="#b0632f">a</text><text x="295" y="160" fill="#b0632f">b</text>
+        <path d="M95,325 Q108,330 110,342" fill="none" stroke="#1f3a5f" stroke-width="2"/>
+        <text x="112" y="318" fill="#1f3a5f" font-size="17">α, β, γ</text>
+        <text x="20" y="30" fill="#5a6472" font-size="16">angles between rays: from the image</text>
+        <text x="20" y="52" fill="#5a6472" font-size="16">a, b, c: from the map</text>
+      </g>
+    </svg>
+    <div style="font-size:0.76em">
+      <p>Law of cosines on each triangle \((C, \mathbf{X}_i, \mathbf{X}_j)\):</p>
+      $$\begin{aligned} a^2 &= s_2^2 + s_3^2 - 2 s_2 s_3 \cos\alpha\\ b^2 &= s_1^2 + s_3^2 - 2 s_1 s_3 \cos\beta\\ c^2 &= s_1^2 + s_2^2 - 2 s_1 s_2 \cos\gamma\end{aligned}$$
+      <p>With \(s_2 = u s_1,\ s_3 = v s_1\): <strong>two conics</strong> in \((u, v)\) → a <strong>quartic</strong> in \(v\) → up to <strong>4</strong> solutions.</p>
+      <p>Depths known → points in both frames → \(R, \mathbf{t}\) by SVD (Kabsch).</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Ambiguity</span>Up to four poses fit three points</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.76em">
+      <img class="fig h240" src="assets/gen/d2_nb_p3p_counts.png">
+      <div class="figcap"><span class="fignum">Fig. 2.</span> 2000 random triangles: usually 2 real solutions, sometimes 4</div>
+      <p>All candidates reproject X₁–X₃ <em>exactly</em>. A <strong>4th point</strong> (or RANSAC voting) picks the right one.</p>
+      <p class="small">Our 40-line solver matches <code>cv2.solveP3P</code> to 1e-11.</p>
+    </div>
+    <img class="fig h460" src="assets/gen/d2_p3p_4solutions.gif">
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Real data</span>Many noisy points, many outliers</h2>
+  <div class="cols">
+    <div>
+      <img class="fig h300" src="assets/gen/d2_nb_pnp_noise.png">
+      <p style="font-size:0.68em">EPnP (Lepetit 2009) + Levenberg–Marquardt on the reprojection error. More points, less noise → better pose.</p>
+    </div>
+    <div>
+      <img class="fig h300" src="assets/gen/d2_nb_pnp_ransac.png">
+      <p style="font-size:0.68em"><strong>RANSAC + P3P</strong>, then refine on inliers. 50% wrong matches → 0.04° / 5 mm error. Plain least squares: 154° off.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= 2 hloc -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 2 of 3</span>Visual localisation with hloc</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li>PnP and the P3P solver</li>
+    <li class="current">Visual localisation with hloc</li>
+    <li>Navigation: planning in the map we built</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>SfM with learned features</li>
+    <li>Image retrieval with a global descriptor</li>
+    <li>Local matches → 2D–3D → PnP + RANSAC</li>
+    <li>Day–night, viewpoint, scale</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day2_02_hloc_localization.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">Step 0 · the map</span>SfM with learned features</h2>
+  <div class="cols w-6-4">
+    <img class="fig h460" src="assets/gen/d2_nb_sfm2d.png">
+    <div style="font-size:0.74em">
+      <ul>
+        <li><strong>SuperPoint</strong>: CNN keypoints + descriptors</li>
+        <li><strong>LightGlue</strong>: transformer matcher, attends across both images</li>
+        <li>triangulation + BA: COLMAP via <code>pycolmap</code></li>
+      </ul>
+      <p class="small">Blue = keypoints that became 3D points (they will be matched at query time). Red = not in the map (sky, trees, people).</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Step 1 · coarse</span>Image retrieval with a global descriptor</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.72em">
+      <p>One vector per image; nearest neighbours = same place. <strong>VLAD</strong> (Jégou 2010):</p>
+      $$\mathbf{v}_k = \sum_{i:\,\mathrm{NN}(\mathbf{d}_i)=k} (\mathbf{d}_i - \mathbf{c}_k)$$
+      <p>Concatenate, normalise, compare with a dot product. <strong>NetVLAD</strong> (Arandjelović 2016) learns it end-to-end. Today: MegaLoc, AnyLoc (DINOv2), ...</p>
+      <p>This is also <em>visual place recognition</em>, the localisation step of a <strong>topological</strong> map.</p>
+    </div>
+    <div>
+      <img class="fig h240" src="assets/gen/d2_nb_retrieval_q1.png">
+      <img class="fig h240" style="margin-top:8px" src="assets/gen/d2_nb_retrieval_q2.png">
+      <div class="figcap"><span class="fignum">Fig. 3.</span> query (left) and its top-4 map images (our small VLAD on SuperPoint descriptors)</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Steps 2–3 · fine</span>Local matches → 2D–3D → PnP + RANSAC</h2>
+  <div class="cols">
+    <div><img class="fig h360" src="assets/gen/d2_nb_loc_q1.png"><div class="figcap"><span class="fignum">Fig. 4.</span> day query: 597 / 685 inliers</div></div>
+    <div><img class="fig h360" src="assets/gen/d2_nb_loc_q2.png"><div class="figcap"><span class="fignum">Fig. 5.</span> <strong>night</strong> query vs day map: 107 / 352 inliers</div></div>
+  </div>
+  <p style="font-size:0.7em">Unknown focal length (internet photo): start from an EXIF guess, then refine pose <em>and</em> focal by minimising reprojection error. Feeding the same 2D–3D pairs to <code>cv2.solvePnPRansac</code> gives the same pose (Δ rotation 0.07° for the day query, 1.3° for the night one).</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Why learned features</span>Day–night, viewpoint, scale</h2>
+  <div class="cols">
+    <div><img class="fig h420" src="assets/papers/superglue_indoor.png"><div class="figcap"><span class="fignum">Fig. 6.</span> SuperGlue on a wide-baseline indoor pair (Sarlin et al., CVPR 2020)</div></div>
+    <div><img class="fig h420" src="assets/papers/mast3r_matching.jpg"><div class="figcap"><span class="fignum">Fig. 7.</span> MASt3R dense matching from 3D-aware features (Leroy et al., ECCV 2024)</div></div>
+  </div>
+  <div class="cite">Figures from github.com/magicleap/SuperGluePretrainedNetwork and github.com/naver/mast3r.</div>
+</section>
+
+<!-- ======================================================= 3 PLANNING -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 3 of 3</span>Navigation: planning in the map we built</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li>PnP and the P3P solver</li>
+    <li>Visual localisation with hloc</li>
+    <li class="current">Navigation: planning in the map we built</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>What "path planning" means</li>
+    <li>Dijkstra vs. A*</li>
+    <li>PRM · RRT · RRT* with OMPL</li>
+    <li>Roadmap vs. tree vs. optimal tree</li>
+    <li>Same API, a 7-DOF arm</li>
+    <li>Planning on a topological map</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day2_03_planning_ompl.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">The map decides the planner</span>What "path planning" means</h2>
+  <table style="font-size:0.75em">
+    <tr><th>map</th><th>search space</th><th>planner</th><th>output</th></tr>
+    <tr><td>2D occupancy grid</td><td>grid cells</td><td>Dijkstra, <strong>A*</strong></td><td>cell sequence</td></tr>
+    <tr><td>any map + collision checker</td><td>configurations \(q\): \((x, y)\), \((x,y,\theta)\), joint angles</td><td><strong>PRM, RRT, RRT*</strong> (OMPL)</td><td>continuous path</td></tr>
+    <tr><td>topological graph</td><td>places / images</td><td>Dijkstra on the graph</td><td>sequence of <em>subgoal images</em></td></tr>
+  </table>
+  <img class="fig h300" style="margin-top:16px" src="assets/gen/d2_nb_cspace.png">
+  <div class="figcap"><span class="fignum">Fig. 8.</span> C-space: inflate obstacles by the robot radius (0.2 m), then plan for a point. Unknown = blocked.</div>
+</section>
+
+<section>
+  <h2><span class="kicker">Graph search on the grid</span>Dijkstra vs. A*</h2>
+  <img class="fig h420" src="assets/gen/d2_astar_vs_dijkstra.gif">
+  <div class="cols" style="font-size:0.72em; margin-top:6px">
+    <div>$$f(n) = g(n) + h(n)$$</div>
+    <div>\(h = 0\): Dijkstra. \(h\) = straight-line distance (never overestimates) → <strong>A*</strong>: same optimal path, ~40% of the expansions.</div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Sampling-based planning</span>PRM · RRT · RRT* with OMPL</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.76em">
+      <p>Only needs a collision checker <code>is_valid(q)</code>, so it works in high dimensions (arms, drones).</p>
+      <ul>
+        <li><strong>PRM</strong> (Kavraki 1996): sample a roadmap, then graph search. Good for many queries</li>
+        <li><strong>RRT</strong> (LaValle 1998): grow a tree towards random samples. Fast, not optimal</li>
+        <li><strong>RRT*</strong> (Karaman &amp; Frazzoli 2011): + rewiring → asymptotically optimal</li>
+      </ul>
+    </div>
+    <div><img class="fig h460" src="assets/gen/d2_rrt_growth.gif"><div class="figcap"><span class="fignum">Fig. 9.</span> RRT on the lounge C-space (stops at the first path)</div></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Same start and goal, 1 s each</span>Roadmap vs. tree vs. optimal tree</h2>
+  <img class="fig h300" src="assets/gen/d2_nb_sampling.png">
+  <div class="cols w-4-6" style="margin-top:6px">
+    <div style="font-size:0.72em">
+      <p>RRT* is <strong>anytime</strong>: give it more time and the path keeps getting shorter. It even beats A* on the 8-connected grid, whose paths zig-zag along grid directions.</p>
+    </div>
+    <img class="fig h300" src="assets/gen/d2_nb_anytime.png">
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">OMPL in the wild</span>Same API, a 7-DOF arm</h2>
+  <div class="cols w-6-4">
+    <img class="fig h460" src="assets/papers/ompl_capt_comparison.gif">
+    <div style="font-size:0.74em">
+      <p>OMPL (Şucan, Moll &amp; Kavraki, 2012) is the planning back-end of <strong>MoveIt</strong>, and is used in many navigation stacks.</p>
+      <p>Since v2.0: <code>pip install ompl</code>.</p>
+<pre><code>ss = og.SimpleSetup(space)
+ss.setStateValidityChecker(is_valid)
+ss.setStartAndGoalStates(start, goal)
+ss.setPlanner(og.RRTstar(si))
+ss.solve(1.0)</code></pre>
+    </div>
+  </div>
+  <div class="cite">Animation from the OMPL gallery (github.com/ompl/ompl, doc/images/gallery).</div>
+</section>
+
+<section>
+  <h2><span class="kicker">No metric map needed</span>Planning on a topological map</h2>
+  <div class="cols w-6-4">
+    <img class="fig h300" src="assets/gen/d2_nb_topo.png">
+    <div style="font-size:0.72em">
+      <p>Nodes = places where we have images (Day 1 keyframes). Edges = "reachable from here".</p>
+      <p>Plan = Dijkstra → a <strong>sequence of subgoal images</strong>. Execute it with a local controller that drives towards the next image: visual servoing / a learned image-goal policy (main lecture).</p>
+    </div>
+  </div>
+  <img class="fig h240" style="margin-top:6px" src="assets/gen/d2_nb_subgoals.png">
+</section>
+
+<section>
+  <h2>Takeaways</h2>
+  <div class="cols top">
+    <ul style="font-size:0.86em">
+      <li>Metric localisation = <strong>2D–3D matches + PnP-RANSAC</strong>. P3P is minimal and has up to 4 solutions.</li>
+      <li><strong>hloc</strong>: retrieval (coarse) → learned local matching → PnP (fine). Works day-to-night.</li>
+      <li>Place recognition alone = localisation in a <strong>topological</strong> map.</li>
+      <li>Planning depends on the map: <strong>A*</strong> on grids, <strong>RRT*/PRM</strong> (OMPL) in continuous C-space, <strong>Dijkstra</strong> on place graphs.</li>
+      <li>Real stacks = global planner + local controller.</li>
+    </ul>
+    <div class="sidebar">
+      <h4>Read more</h4>
+      <ol class="refs">
+        <li>Haralick et al., <i>Review of P3P solutions</i>, IJCV 1994 · Kneip et al., CVPR 2011</li>
+        <li>Lepetit et al., <i>EPnP</i>, IJCV 2009</li>
+        <li>Sarlin et al., <i>hloc</i>, CVPR 2019 · DeTone et al., SuperPoint, 2018 · Lindenberger et al., LightGlue, ICCV 2023</li>
+        <li>Arandjelović et al., NetVLAD, CVPR 2016</li>
+        <li>LaValle, <i>Planning Algorithms</i> (free online) · Karaman &amp; Frazzoli, IJRR 2011</li>
+        <li>Siegwart, Nourbakhsh &amp; Scaramuzza, <i>Intro. to Autonomous Mobile Robots</i></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+</div>
+<div class="deck-footer"><span>Visual Navigation · Hands-on session · Day 2: Localization &amp; Navigation</span><span class="footer-right">Robotics Research Center, IIIT Hyderabad<img src="assets/logos/rrc_logo.png" alt="RRC"><img src="assets/logos/iiit_hyderabad_emblem.png" alt="IIIT Hyderabad"></span></div>
+</div>
+
+<script src="assets/lib/reveal/reveal.js"></script>
+<script src="assets/lib/reveal/plugin/math/math.js"></script>
+<script src="assets/lib/reveal/plugin/notes/notes.js"></script>
+<script src="assets/lib/reveal/plugin/zoom/zoom.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.05, hash: true, slideNumber: "c/t", center: false,
+    transition: "none", backgroundTransition: "none",
+    katex: { local: "assets/lib/katex", delimiters: [
+      { left: "$$", right: "$$", display: true }, { left: "\\(", right: "\\)", display: false } ] },
+    plugins: [ RevealMath.KaTeX, RevealNotes, RevealZoom ]
+  });
+  // running footer on every slide except the title slide
+  const footer = document.querySelector('.deck-footer');
+  const syncFooter = () => footer.classList.toggle('hidden', Reveal.getIndices().h === 0);
+  Reveal.on('ready', syncFooter); Reveal.on('slidechanged', syncFooter);
+</script>
+</body>
+</html>

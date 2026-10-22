@@ -1,0 +1,157 @@
+/* =====================================================================
+   Academic theme for the visual-navigation hands-on slides (reveal.js 5)
+   Restrained palette, Source Sans 3, booktabs tables, numbered figures,
+   running footer. Used by day1_mapping_academic.html and
+   day2_localization_navigation_academic.html.
+   ===================================================================== */
+:root {
+  --ink:    #1f2328;   /* body text (charcoal) */
+  --navy:   #1f3a5f;   /* headings, primary emphasis */
+  --slate:  #5a6472;   /* secondary text, captions */
+  --teal:   #2e6f73;   /* sparing secondary accent */
+  --rule:   #c9ced6;   /* hairlines */
+  --faint:  #e6e9ee;
+  --paper:  #ffffff;
+  --code-bg:#f5f6f8;
+  --font:   "Source Sans 3", "Source Sans Pro", Arial, Helvetica, sans-serif;
+  --mono:   "Source Code Pro", Menlo, Consolas, monospace;
+}
+
+.reveal-viewport { background: var(--paper); }
+.reveal { font-family: var(--font); font-size: 28px; color: var(--ink); font-weight: 400;
+  font-variant-numeric: lining-nums; -webkit-font-smoothing: antialiased; }
+.reveal .slides { text-align: left; counter-reset: fig; }
+.reveal .slides section { height: 100%; box-sizing: border-box; padding: 2px 6px 0 6px; }
+
+/* ---------- frame title: small running label, title, hairline ---------- */
+.reveal h1, .reveal h2, .reveal h3, .reveal h4 { font-family: var(--font); text-transform: none; letter-spacing: 0; }
+.reveal h2 { font-size: 1.22em; font-weight: 600; color: var(--navy); line-height: 1.15;
+  margin: 0 0 16px 0; padding-bottom: 9px; border-bottom: 1px solid var(--rule); }
+.reveal h2 .kicker { display: block; font-size: 0.5em; font-weight: 400; color: var(--slate);
+  margin-bottom: 3px; letter-spacing: 0.01em; }
+.reveal h3 { font-size: 0.9em; font-weight: 600; color: var(--slate); margin: 0 0 8px 0; }
+
+.reveal p, .reveal li { line-height: 1.36; }
+.reveal p { margin: 0 0 0.55em 0; }
+.reveal ul, .reveal ol { margin: 0 0 0.4em 1.15em; padding: 0; }
+.reveal li { margin: 0.18em 0; padding-left: 0.15em; }
+.reveal ul > li::marker { content: "–  "; color: var(--slate); }
+.reveal ol > li::marker { color: var(--slate); font-weight: 600; }
+.reveal strong { font-weight: 600; color: inherit; }
+.reveal em { font-style: italic; color: inherit; }
+.reveal i { font-style: italic; }
+.reveal a { color: var(--teal); }
+.reveal code { font-family: var(--mono); font-size: 0.8em; background: none; padding: 0 2px; color: #33404f; }
+
+.reveal small, .small { font-size: 0.66em; color: var(--slate); }
+.reveal .cite { position: absolute; bottom: 40px; left: 6px; right: 6px; font-size: 0.5em; color: var(--slate);
+  border-top: 1px solid var(--faint); padding-top: 4px; }
+.reveal .cite a { color: var(--slate); }
+
+/* ---------- layout ---------- */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: center; }
+.cols.w-6-4 { grid-template-columns: 1.5fr 1fr; }
+.cols.w-4-6 { grid-template-columns: 1fr 1.5fr; }
+.cols.w-3-7 { grid-template-columns: 1fr 2.4fr; }
+.cols.w-7-3 { grid-template-columns: 2.3fr 1fr; }
+.cols.top { align-items: start; }
+.cols.divided > * + * { border-left: 1px solid var(--rule); padding-left: 30px; }
+.grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 30px; }
+.center { text-align: center; }
+
+/* ---------- figures, numbered captions ---------- */
+.reveal img { margin: 0; max-width: 100%; }
+.fig { display: block; margin: 0 auto; width: 100%; height: auto; max-width: 100%; max-height: 520px; object-fit: contain; }
+.fig.h420 { max-height: 480px; } .fig.h360 { max-height: 400px; } .fig.h300 { max-height: 320px; }
+.fig.h460 { max-height: 530px; } .fig.h560 { max-height: 570px; } .fig.h240 { max-height: 255px; }
+.figcap { font-size: 0.54em; color: var(--slate); text-align: left; margin: 5px 0 0 0; line-height: 1.3; }
+.figcap .fignum { font-weight: 600; color: var(--ink); margin-right: 0.25em; }
+.figcap.center { text-align: center; }
+
+/* ---------- remarks (replace coloured boxes) ---------- */
+.remark { border-left: 2px solid var(--navy); padding: 2px 0 2px 14px; margin: 10px 0; }
+.remark.muted { border-left-color: var(--rule); }
+.remark h4 { display: inline; font-size: 1em; font-weight: 600; color: var(--navy); margin: 0 0.35em 0 0; }
+.remark h4::after { content: "."; }
+.sidebar { border-left: 1px solid var(--rule); padding-left: 22px; }
+.sidebar h4 { font-size: 0.95em; font-weight: 600; color: var(--navy); margin: 0 0 6px 0; }
+
+/* ---------- equations ---------- */
+.reveal .katex { font-size: 1.05em; }
+.reveal .katex-display { margin: 0.4em 0; }
+.eqlabel { float: right; color: var(--slate); font-size: 0.7em; }
+
+/* ---------- booktabs tables ---------- */
+.reveal table { border-collapse: collapse; font-size: 0.66em; margin: 8px 0; border-top: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink); }
+.reveal table th { border-bottom: 1px solid var(--ink); padding: 6px 14px; text-align: left; font-weight: 600; }
+.reveal table td { border: none; padding: 5px 14px; vertical-align: top; }
+.reveal table tr + tr td { border-top: 1px solid var(--faint); }
+.reveal table.numeric td:not(:first-child), .reveal table.numeric th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.reveal table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.agenda td:first-child { font-family: var(--mono); font-size: 0.9em; color: #33404f; white-space: nowrap; }
+
+/* ---------- code ---------- */
+.reveal pre { width: 100%; box-shadow: none; margin: 10px 0; }
+.reveal pre code { display: block; white-space: pre; overflow: auto; font-size: 0.56em; line-height: 1.55; padding: 12px 16px;
+  background: var(--code-bg); color: #22303e; border-left: 2px solid var(--slate); border-radius: 0; max-height: 560px; }
+.reveal pre code .c { color: #6b7684; font-style: italic; }
+
+/* ---------- references ---------- */
+.refs { font-size: 0.66em; color: var(--ink); margin: 0; padding-left: 2.1em; }
+.refs li { margin: 0.25em 0; padding-left: 0.2em; line-height: 1.3; }
+.refs li::marker { content: "[" counter(list-item) "]  "; color: var(--slate); font-weight: 400; }
+
+/* ---------- section (outline) slides ---------- */
+.outline-label { font-size: 0.6em; color: var(--slate); margin: 18px 0 14px 0; }
+.outline-slide .sidebar { margin-top: 18px; }
+.outline { list-style: none; margin: 0 !important; padding: 0; counter-reset: sec; }
+.outline li { counter-increment: sec; font-size: 1em; color: #a3abb6; padding: 7px 0 7px 18px; margin: 0;
+  border-left: 3px solid transparent; }
+.outline li::marker { content: none; }
+.outline li::before { content: counter(sec) "  "; display: inline-block; width: 1.4em; font-variant-numeric: tabular-nums; }
+.outline li.current { color: var(--navy); font-weight: 600; border-left-color: var(--navy); }
+.outline-nb { margin-top: 30px; font-size: 0.6em; color: var(--slate); border-top: 1px solid var(--faint); padding-top: 10px; }
+.outline-nb code { font-size: 1em; }
+
+/* ---------- title slide ---------- */
+.reveal section.title { display: flex !important; flex-direction: column; justify-content: center; padding-left: 40px; }
+.title .event { font-size: 0.68em; color: var(--slate); margin-bottom: 26px; }
+.title h1 { font-size: 1.85em; font-weight: 600; color: var(--navy); line-height: 1.1; margin: 0 0 14px 0; }
+.title .sub { font-size: 0.86em; color: var(--ink); max-width: 980px; line-height: 1.35; }
+.title .rule { width: 100%; max-width: 1100px; height: 0; border-top: 1px solid var(--rule); margin: 30px 0 18px 0; }
+.title .author { font-size: 0.78em; font-weight: 600; color: var(--ink); }
+.title .affil { font-size: 0.66em; color: var(--slate); margin-top: 4px; }
+.title .meta { font-size: 0.6em; color: var(--slate); margin-top: 26px; }
+
+/* ---------- running footer and slide number ---------- */
+.deck-footer { position: fixed; left: 0; right: 0; bottom: 0; height: 30px; z-index: 10; pointer-events: none;
+  font-family: var(--font); font-size: 13px; color: var(--slate); display: flex; justify-content: space-between;
+  align-items: center; padding: 0 70px 0 22px; border-top: 1px solid var(--faint); background: var(--paper); }
+.deck-footer.hidden { display: none; }
+.reveal .slide-number { background: transparent; color: var(--slate); font-family: var(--font); font-size: 13px;
+  right: 18px; bottom: 7px; padding: 0; z-index: 11; }
+.reveal .slide-number a { color: var(--slate); text-decoration: none; }
+.reveal .progress { color: var(--navy); height: 2px; }
+.reveal .controls { color: #9aa3ae; opacity: 0.5; bottom: 34px; right: 14px; transform: scale(0.65); transform-origin: bottom right; }
+
+svg text { font-family: var(--font); }
+.sidebar-col h4 { font-size: 0.95em; font-weight: 600; color: var(--navy); margin: 0 0 8px 0; }
+
+.defn { padding: 4px 0 14px 0; margin-bottom: 14px; border-bottom: 1px solid var(--faint); }
+.defn:last-child { border-bottom: none; }
+.defn h4 { font-size: 1em; font-weight: 600; color: var(--navy); margin: 0 0 6px 0; }
+.inpart { font-size: 0.7em; color: var(--slate); margin-left: 1em !important; }
+.inpart li { margin: 0.3em 0; }
+.reveal h2 .kicker code { font-size: 1em; color: var(--slate); }
+
+/* ---------- institutional logos ---------- */
+.title-logos { position: absolute; top: 34px; right: 40px; display: flex; align-items: center; gap: 26px; }
+.title-logos img { height: 74px; width: auto; display: block; }
+.title-logos img[alt="IIIT Hyderabad"] { height: 88px; }
+.title-logos .sep { width: 0; height: 64px; border-left: 1px solid var(--rule); }
+.deck-footer { height: 34px; }
+.footer-right { display: flex; align-items: center; gap: 12px; }
+.footer-right img { height: 24px; width: auto; display: block; }
+.footer-right img:first-of-type { margin-left: 6px; }
+.reveal .slide-number { bottom: 9px; }

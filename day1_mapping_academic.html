@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 1 · Mapping (hands-on)</title>
+<link rel="stylesheet" href="assets/lib/reveal/reset.css">
+<link rel="stylesheet" href="assets/lib/reveal/reveal.css">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/academic.css">
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ======================================================= TITLE -->
+<section class="title">
+  <div class="title-logos">
+    <img src="assets/logos/rrc_logo.png" alt="Robotics Research Center">
+    <span class="sep"></span>
+    <img src="assets/logos/iiit_hyderabad_logo.png" alt="IIIT Hyderabad">
+  </div>
+  <div class="event">Visual Navigation · Hands-on session</div>
+  <h1>Day 1 — Mapping</h1>
+  <div class="sub">From pixels to maps: two-view geometry, visual odometry, pose graphs, map representations, COLMAP</div>
+  <div class="rule"></div>
+  <div class="author">Akash S Kumbar</div>
+  <div class="affil">Robotics Research Center, IIIT Hyderabad</div>
+  <div class="meta">Colab notebooks in <code>notebooks/day1_*.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">The next 45 minutes</span>Plan</h2>
+  <table class="agenda" style="font-size:0.8em">
+    <tr><th>notebook</th><th>idea</th><th>you will see</th><th>min</th></tr>
+    <tr><td>day1_01_two_view_geometry</td><td>camera model, features, RANSAC, E, triangulation</td><td>3D points from 2 photos</td><td>12</td></tr>
+    <tr><td>day1_02_visual_odometry</td><td>init → track (PnP) → map, drift</td><td>a trajectory from a video</td><td>6</td></tr>
+    <tr><td>day1_03_pose_graph</td><td>loop closure + Gauss–Newton</td><td>the loop snaps shut</td><td>10</td></tr>
+    <tr><td>day1_04_geometric_maps_open3d</td><td>points, voxels, TSDF, occupancy grid</td><td>5 maps of one room</td><td>7</td></tr>
+    <tr><td>day1_05_colmap_cli</td><td>SfM step by step from the CLI</td><td>what COLMAP writes</td><td>10</td></tr>
+  </table>
+  <p class="small">Everything runs on a Colab CPU runtime. Data: Sacre Coeur photos (hloc), TUM RGB-D <code>fr3/long_office_household</code>, Stanford <em>lounge</em> RGB-D.</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Big picture</span>What a visual SLAM system does</h2>
+  <svg viewBox="0 0 1200 450" width="100%" height="450">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2328"/></marker></defs>
+    <g font-size="22">
+      <rect x="10" y="120" width="220" height="190" rx="2" fill="#fff" stroke="#b8bfc9" stroke-width="2"/>
+      <text x="120" y="160" text-anchor="middle" font-weight="600">Sensors</text>
+      <text x="120" y="200" text-anchor="middle" fill="#5a6472">camera</text>
+      <text x="120" y="232" text-anchor="middle" fill="#5a6472">(stereo / RGB-D)</text>
+      <text x="120" y="264" text-anchor="middle" fill="#5a6472">IMU, wheels</text>
+
+      <rect x="300" y="60" width="270" height="300" rx="2" fill="#f4f7f7" stroke="#2e6f73" stroke-width="1.6"/>
+      <text x="435" y="100" text-anchor="middle" font-weight="600" fill="#2e6f73">Front-end</text>
+      <text x="435" y="145" text-anchor="middle">features + matching</text>
+      <text x="435" y="180" text-anchor="middle">RANSAC (E, F, PnP)</text>
+      <text x="435" y="215" text-anchor="middle">visual odometry</text>
+      <text x="435" y="250" text-anchor="middle">triangulation</text>
+      <text x="435" y="300" text-anchor="middle" fill="#b0632f">place recognition</text>
+      <text x="435" y="330" text-anchor="middle" fill="#b0632f">→ loop closures</text>
+
+      <rect x="640" y="60" width="250" height="300" rx="2" fill="#f8f5f3" stroke="#b0632f" stroke-width="1.6"/>
+      <text x="765" y="100" text-anchor="middle" font-weight="600" fill="#b0632f">Back-end</text>
+      <text x="765" y="150" text-anchor="middle">pose graph</text>
+      <text x="765" y="185" text-anchor="middle">bundle adjustment</text>
+      <text x="765" y="220" text-anchor="middle">nonlinear least squares</text>
+      <text x="765" y="255" text-anchor="middle" fill="#5a6472">(Gauss–Newton / LM)</text>
+
+      <rect x="960" y="60" width="230" height="300" rx="2" fill="#fff" stroke="#1f3a5f" stroke-width="1.6"/>
+      <text x="1075" y="100" text-anchor="middle" font-weight="600" fill="#1f3a5f">Map</text>
+      <text x="1075" y="150" text-anchor="middle">poses (trajectory)</text>
+      <text x="1075" y="185" text-anchor="middle">sparse 3D points</text>
+      <text x="1075" y="220" text-anchor="middle">dense / mesh</text>
+      <text x="1075" y="255" text-anchor="middle">occupancy grid</text>
+      <text x="1075" y="290" text-anchor="middle">topological graph</text>
+
+      <line x1="232" y1="215" x2="296" y2="215" stroke="#1f2328" stroke-width="1.8" marker-end="url(#ar)"/>
+      <line x1="572" y1="210" x2="636" y2="210" stroke="#1f2328" stroke-width="1.8" marker-end="url(#ar)"/>
+      <line x1="892" y1="210" x2="956" y2="210" stroke="#1f2328" stroke-width="1.8" marker-end="url(#ar)"/>
+      <path d="M1075,362 C1075,420 435,420 435,366" fill="none" stroke="#5a6472" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#ar)"/>
+      <text x="755" y="440" text-anchor="middle" fill="#5a6472" font-size="19">the front-end tracks against the map</text>
+      <text x="435" y="40" text-anchor="middle" fill="#5a6472" font-size="18">notebooks 1, 2, 5</text>
+      <text x="765" y="40" text-anchor="middle" fill="#5a6472" font-size="18">notebook 3</text>
+      <text x="1075" y="40" text-anchor="middle" fill="#5a6472" font-size="18">notebook 4</text>
+    </g>
+  </svg>
+</section>
+
+<!-- ======================================================= 1 TWO-VIEW -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 1 of 5</span>Two-view geometry</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li class="current">Two-view geometry</li>
+    <li>Visual odometry</li>
+    <li>The back-end: pose-graph optimisation</li>
+    <li>What does SLAM produce? A zoo of maps</li>
+    <li>COLMAP, one stage at a time</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>The pinhole camera</li>
+    <li>Features: points we can find again</li>
+    <li>Matching + Lowe's ratio test</li>
+    <li>Epipolar constraint</li>
+    <li>RANSAC</li>
+    <li>Inliers, outliers, epipolar lines</li>
+    <li>Relative pose, then triangulation</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day1_01_two_view_geometry.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">Camera model</span>The pinhole camera</h2>
+  <div class="cols w-6-4">
+    <svg viewBox="0 0 640 400" width="100%" height="470">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2328"/></marker></defs>
+      <g font-size="20">
+        <polygon points="300,70 420,40 420,300 300,330" fill="#eef2f6" stroke="#1f3a5f" stroke-width="2"/>
+        <text x="430" y="60" fill="#1f3a5f">image plane (Z = f)</text>
+        <circle cx="70" cy="200" r="7" fill="#1f2328"/><text x="40" y="240">C</text>
+        <line x1="70" y1="200" x2="600" y2="200" stroke="#5a6472" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#a2)"/>
+        <text x="500" y="228" fill="#5a6472">optical axis Z</text>
+        <line x1="70" y1="200" x2="70" y2="320" stroke="#5a6472" stroke-width="1.5" marker-end="url(#a2)"/><text x="80" y="320" fill="#5a6472">y</text>
+        <line x1="70" y1="200" x2="560" y2="90" stroke="#b0632f" stroke-width="1.6"/>
+        <circle cx="560" cy="90" r="9" fill="#b0632f"/><text x="572" y="86" fill="#b0632f" font-weight="600">X</text>
+        <circle cx="360" cy="135" r="7" fill="#2e6f73"/><text x="335" y="120" fill="#2e6f73" font-weight="600">x</text>
+        <circle cx="360" cy="185" r="5" fill="#1f3a5f"/><text x="368" y="178" fill="#1f3a5f" font-size="17">(cₓ, c_y)</text>
+        <line x1="70" y1="355" x2="360" y2="355" stroke="#1f2328" stroke-width="1.5"/><text x="200" y="380">f</text>
+        <line x1="70" y1="345" x2="70" y2="365" stroke="#1f2328"/><line x1="360" y1="345" x2="360" y2="365" stroke="#1f2328"/>
+        <text x="85" y="132" fill="#5a6472" font-size="17">every 3D point on the</text>
+        <text x="85" y="154" fill="#5a6472" font-size="17">orange ray → same pixel x</text>
+      </g>
+    </svg>
+    <div>
+      $$\mathbf{X}_c = R\,\mathbf{X}_w + \mathbf{t}$$
+      $$\lambda\begin{bmatrix}u\\v\\1\end{bmatrix} = \underbrace{\begin{bmatrix}f_x&0&c_x\\0&f_y&c_y\\0&0&1\end{bmatrix}}_{K}\mathbf{X}_c$$
+      <ul style="font-size:0.78em">
+        <li><strong>K</strong>: intrinsics (calibration)</li>
+        <li><strong>R, t</strong>: extrinsics, the pose we want</li>
+        <li>λ = depth is <em>divided away</em>, so one image gives no 3D</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Front-end · step 1</span>Features: points we can find again</h2>
+  <div class="cols w-4-6">
+    <div>
+      <img class="fig h460" src="assets/gen/d1_nb_sift.png">
+    </div>
+    <div>
+      <table>
+        <tr><th></th><th>SIFT (2004)</th><th>ORB (2011)</th></tr>
+        <tr><td>descriptor</td><td>128-D float</td><td>256-bit binary</td></tr>
+        <tr><td>distance</td><td>L2</td><td>Hamming (fast)</td></tr>
+        <tr><td>used in</td><td>COLMAP</td><td>ORB-SLAM</td></tr>
+      </table>
+      <p style="font-size:0.7em">Keypoint = <em>where</em> (corner/blob, scale, orientation). Descriptor = <em>what it looks like</em>.<br>Learned: SuperPoint, ALIKED + LightGlue (Day 2).</p>
+      <img class="fig h240" src="assets/papers/lightglue_easy_hard.jpg">
+      <div class="figcap"><span class="fignum">Fig. 1.</span> LightGlue matching easy and hard pairs (Lindenberger et al., ICCV 2023)</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Front-end · step 2</span>Matching + Lowe's ratio test</h2>
+  <img class="fig h420" src="assets/gen/d1_nb_ratio.png">
+  <p class="center" style="font-size:0.8em">Keep a match only if \( d_1 / d_2 < 0.75 \) (best vs. second-best neighbour). Ambiguous points get dropped. 4000 → ~800 matches.</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Geometry</span>Epipolar constraint</h2>
+  <div class="cols w-6-4">
+    <svg viewBox="0 0 660 400" width="100%" height="460">
+      <g font-size="19">
+        <polygon points="70,120 250,80 250,290 70,330" fill="#eef2f6" stroke="#1f3a5f" stroke-width="2"/>
+        <polygon points="410,80 590,120 590,330 410,290" fill="#eef2f6" stroke="#1f3a5f" stroke-width="2"/>
+        <circle cx="120" cy="360" r="7" fill="#1f2328"/><text x="95" y="392">C₁</text>
+        <circle cx="540" cy="360" r="7" fill="#1f2328"/><text x="540" y="392">C₂</text>
+        <line x1="120" y1="360" x2="540" y2="360" stroke="#5a6472" stroke-width="2"/><text x="300" y="385" fill="#5a6472">baseline t</text>
+        <circle cx="330" cy="30" r="9" fill="#b0632f"/><text x="345" y="30" fill="#b0632f" font-weight="600">X</text>
+        <line x1="120" y1="360" x2="330" y2="30" stroke="#b0632f" stroke-width="2"/>
+        <line x1="540" y1="360" x2="330" y2="30" stroke="#b0632f" stroke-width="2"/>
+        <line x1="120" y1="360" x2="290" y2="-20" stroke="#b0632f" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.6"/>
+        <circle cx="191" cy="249" r="6" fill="#2e6f73"/><text x="160" y="240" fill="#2e6f73" font-weight="600">x₁</text>
+        <circle cx="469" cy="249" r="6" fill="#2e6f73"/><text x="478" y="240" fill="#2e6f73" font-weight="600">x₂</text>
+        <line x1="425" y1="300" x2="520" y2="150" stroke="#3d6b45" stroke-width="1.8"/>
+        <text x="520" y="150" fill="#3d6b45" font-weight="600">l₂ = F x₁</text>
+        <circle cx="430" cy="320" r="5" fill="#1f2328"/><text x="398" y="335" font-size="16">e₂</text>
+      </g>
+    </svg>
+    <div>
+      <p style="font-size:0.75em">The ray of \(\mathbf{x}_1\) seen from camera 2 is a <strong>line</strong>. The match must be on it:</p>
+      $$\tilde{\mathbf{x}}_2^\top F\,\tilde{\mathbf{x}}_1 = 0$$
+      $$E = K_2^\top F K_1 = [\mathbf{t}]_\times R$$
+      <ul style="font-size:0.72em">
+        <li><strong>F</strong>: 7 DOF, no calibration needed</li>
+        <li><strong>E</strong>: 5 DOF (rotation + direction of t)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Robust estimation</span>RANSAC</h2>
+  <div class="cols w-6-4">
+    <img class="fig h460" src="assets/gen/d1_ransac_line.gif">
+    <div style="font-size:0.78em">
+      <ol>
+        <li>sample a <strong>minimal</strong> set</li>
+        <li>fit the model</li>
+        <li>count inliers (distance &lt; τ)</li>
+        <li>repeat, keep the best, refit</li>
+      </ol>
+      $$N = \frac{\log(1-p)}{\log(1-w^s)}$$
+      <table class="numeric" style="font-size:0.75em">
+        <tr><th>inlier ratio w</th><th>s = 3</th><th>s = 5</th><th>s = 8</th></tr>
+        <tr><td>0.7</td><td>11</td><td>26</td><td>78</td></tr>
+        <tr><td>0.5</td><td>35</td><td>146</td><td>1177</td></tr>
+        <tr><td>0.3</td><td>169</td><td>1893</td><td>70188</td></tr>
+      </table>
+      <small>p = 0.99. Minimal solvers matter!</small>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">RANSAC on real matches</span>Inliers, outliers, epipolar lines</h2>
+  <div class="cols">
+    <div><img class="fig h420" src="assets/gen/d1_nb_ransac_matches.png"><div class="figcap"><span class="fignum">Fig. 2.</span> green = consistent with F, red = rejected (82% inliers)</div></div>
+    <div><img class="fig h420" src="assets/gen/d1_nb_epipolar.png"><div class="figcap"><span class="fignum">Fig. 3.</span> each match sits on its epipolar line</div></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Pose + structure</span>Relative pose, then triangulation</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.74em">
+      <p>\(E = U\,\mathrm{diag}(1,1,0)\,V^\top\) gives <strong>4</strong> candidate \((R,\mathbf{t})\). Keep the one with points <em>in front of both cameras</em>.</p>
+      <p><strong>DLT triangulation:</strong> each view gives \(\tilde{\mathbf{x}}\times P\tilde{\mathbf{X}} = 0\), i.e. 2 equations.</p>
+      $$A\tilde{\mathbf{X}} = \mathbf{0} \Rightarrow \tilde{\mathbf{X}} = \text{last singular vector}$$
+      <div class="remark"><h4>Scale is unknown</h4>‖t‖ = 1. A small room seen up close looks the same as a big room seen from far away.</div>
+    </div>
+    <div><img class="fig h460" src="assets/gen/d1_two_view_cloud.gif"><div class="figcap"><span class="fignum">Fig. 4.</span> TUM frames 0 and 3: ~200 points, mean reprojection error 0.2 px</div></div>
+  </div>
+</section>
+
+<!-- ======================================================= 2 VO -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 2 of 5</span>Visual odometry</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li>Two-view geometry</li>
+    <li class="current">Visual odometry</li>
+    <li>The back-end: pose-graph optimisation</li>
+    <li>What does SLAM produce? A zoo of maps</li>
+    <li>COLMAP, one stage at a time</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>Initialise → track → map</li>
+    <li>Drift</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day1_02_visual_odometry.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">Front-end over a video</span>Initialise → track → map</h2>
+  <div class="cols w-3-7">
+    <svg viewBox="0 0 420 380" width="100%" height="300">
+      <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2328"/></marker></defs>
+      <g font-size="19">
+        <rect x="90" y="10" width="240" height="70" rx="2" fill="#fff" stroke="#b8bfc9" stroke-width="2"/>
+        <text x="210" y="42" text-anchor="middle" font-weight="600">initialise (once)</text>
+        <text x="210" y="66" text-anchor="middle" fill="#5a6472" font-size="16">E → R, t, triangulate</text>
+        <rect x="20" y="150" width="180" height="90" rx="2" fill="#f4f7f7" stroke="#2e6f73" stroke-width="1.6"/>
+        <text x="110" y="185" text-anchor="middle" font-weight="600" fill="#2e6f73">Track</text>
+        <text x="110" y="212" text-anchor="middle" font-size="16">2D–3D → PnP</text>
+        <rect x="225" y="150" width="180" height="90" rx="2" fill="#f8f5f3" stroke="#b0632f" stroke-width="1.6"/>
+        <text x="315" y="185" text-anchor="middle" font-weight="600" fill="#b0632f">Map</text>
+        <text x="315" y="212" text-anchor="middle" font-size="16">triangulate new pts</text>
+        <line x1="210" y1="82" x2="120" y2="146" stroke="#1f2328" stroke-width="1.6" marker-end="url(#a3)"/>
+        <path d="M200,175 L221,175" stroke="#1f2328" stroke-width="1.6" marker-end="url(#a3)"/>
+        <path d="M315,244 C315,320 110,320 110,246" fill="none" stroke="#1f2328" stroke-width="1.6" marker-end="url(#a3)"/>
+        <text x="212" y="345" text-anchor="middle" fill="#5a6472" font-size="17">next frame k+1</text>
+      </g>
+    </svg>
+    <div><img class="fig h460" src="assets/gen/d1_vo.gif"></div>
+  </div>
+  <p class="small">Same loop as PTAM / ORB-SLAM tracking. PnP is the Day 2 topic. The scale stays fixed by the initial baseline.</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Why VO is not enough</span>Drift</h2>
+  <div class="cols w-6-4">
+    <img class="fig h460" src="assets/gen/d1_nb_drift.png">
+    <div style="font-size:0.8em">
+      $$T_k = \Delta T_k\,\Delta T_{k-1}\cdots\Delta T_1$$
+      <p>Every error is inherited by all later poses. Monocular: the <strong>scale drifts</strong> too.</p>
+      <p>Same 17 frames, only <strong>0.5 px</strong> of noise → very different end points.</p>
+      <div class="remark"><h4>Fix</h4>Recognise a revisited place (<em>loop closure</em>) and optimise <em>all</em> poses together.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= 3 POSE GRAPH -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 3 of 5</span>The back-end: pose-graph optimisation</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li>Two-view geometry</li>
+    <li>Visual odometry</li>
+    <li class="current">The back-end: pose-graph optimisation</li>
+    <li>What does SLAM produce? A zoo of maps</li>
+    <li>COLMAP, one stage at a time</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>Pose graph</li>
+    <li>Sparsity and consistency</li>
+    <li>Bundle adjustment</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day1_03_pose_graph.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">SLAM as least squares</span>Pose graph</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.74em">
+      <p>Nodes = poses \(\mathbf{x}_i\). Edges = measured relative poses \(\mathbf{z}_{ij}\) (odometry, loop closures).</p>
+      $$\mathbf{e}_{ij} = \mathrm{t2v}\big(Z_{ij}^{-1} X_i^{-1} X_j\big)$$
+      $$\mathbf{x}^* = \arg\min_{\mathbf{x}} \sum_{ij} \mathbf{e}_{ij}^\top \Omega_{ij}\, \mathbf{e}_{ij}$$
+      <p><strong>Gauss–Newton:</strong> linearise, solve, repeat</p>
+      $$H\Delta\mathbf{x} = -\mathbf{b},\quad H = \textstyle\sum J^\top\Omega J$$
+      <p class="small">Fix \(\mathbf{x}_0\) (gauge). Grisetti et al., <i>A Tutorial on Graph-Based SLAM</i>, 2010.</p>
+    </div>
+    <div><img class="fig h460" src="assets/gen/d1_pose_graph.gif"><div class="figcap"><span class="fignum">Fig. 5.</span> 201 poses, 27 loop closures: converges in 3 iterations</div></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Why it scales · what it buys</span>Sparsity and consistency</h2>
+  <div class="cols w-4-6">
+    <div><img class="fig h420" src="assets/gen/d1_H_spy.png"><div class="figcap"><span class="fignum">Fig. 6.</span> odometry → band, each loop closure → off-diagonal block</div></div>
+    <div><img class="fig h300" src="assets/gen/d1_nb_pg_consistency.png">
+      <p style="font-size:0.7em">Lap-to-lap inconsistency 1.7 m → <strong>0.06 m</strong>. Some absolute error remains: no GPS, so nothing pins the map to "true" world coordinates.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">Same machinery, different error</span>Bundle adjustment</h2>
+  $$\min_{\{R_i,\mathbf{t}_i\},\{\mathbf{X}_j\}} \sum_{(i,j)} \rho\Big(\big\|\pi\big(K(R_i\mathbf{X}_j+\mathbf{t}_i)\big) - \mathbf{x}_{ij}\big\|^2\Big)$$
+  <table style="font-size:0.7em; margin-top:20px">
+    <tr><th></th><th>pose graph</th><th>bundle adjustment</th></tr>
+    <tr><td>unknowns</td><td>poses</td><td>poses + 3D points (+ intrinsics)</td></tr>
+    <tr><td>measurement</td><td>relative pose</td><td>pixel observation</td></tr>
+    <tr><td>used for</td><td>loop closing over big maps</td><td>local windows (ORB-SLAM), full SfM (COLMAP)</td></tr>
+    <tr><td>solvers</td><td colspan="2">Gauss–Newton / Levenberg–Marquardt, sparse Schur complement · g2o, Ceres, GTSAM</td></tr>
+  </table>
+  <p class="small">ρ = robust loss (Huber, Cauchy) so that left-over outliers don't dominate.</p>
+</section>
+
+<!-- ======================================================= 4 MAPS -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 4 of 5</span>What does SLAM produce? A zoo of maps</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li>Two-view geometry</li>
+    <li>Visual odometry</li>
+    <li>The back-end: pose-graph optimisation</li>
+    <li class="current">What does SLAM produce? A zoo of maps</li>
+    <li>COLMAP, one stage at a time</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>Lounge (60 RGB-D frames + poses)</li>
+    <li>Back-projection and TSDF fusion</li>
+    <li>Occupancy grid with log-odds</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day1_04_geometric_maps_open3d.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">Same room, different maps</span>Lounge (60 RGB-D frames + poses)</h2>
+  <div class="grid4">
+    <div><img class="fig h240" src="assets/gen/d1_map_dense.png"><div class="figcap"><span class="fignum">Fig. 7.</span> dense point cloud + trajectory (2 cm voxel-downsampled)</div></div>
+    <div><img class="fig h240" src="assets/gen/d1_map_voxels.png"><div class="figcap"><span class="fignum">Fig. 8.</span> voxel grid, 10 cm (OctoMap-style)</div></div>
+    <div><img class="fig h240" src="assets/gen/d1_map_mesh.png"><div class="figcap"><span class="fignum">Fig. 9.</span> TSDF fusion → mesh</div></div>
+    <div><img class="fig h240" src="assets/gen/d1_map_grid.png"><div class="figcap"><span class="fignum">Fig. 10.</span> 2D occupancy grid → planning (Day 2)</div></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">From depth to surfaces</span>Back-projection and TSDF fusion</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.75em">
+      $$\mathbf{X}_c = Z\,K^{-1}\begin{bmatrix}u\\v\\1\end{bmatrix},\quad \mathbf{X}_w = R_{wc}\mathbf{X}_c + \mathbf{t}_{wc}$$
+      <p><strong>TSDF</strong> (KinectFusion, Newcombe et al. 2011): each voxel stores a truncated signed distance to the surface, averaged over frames:</p>
+      $$D \leftarrow \frac{W D + w_k d_k}{W + w_k},\quad W \leftarrow W + w_k$$
+      <p>Surface = zero level set (marching cubes). Averaging removes depth noise.</p>
+    </div>
+    <img class="fig h460" src="assets/gen/d1_map_mesh_orbit.gif">
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker">The map a ground robot plans on</span>Occupancy grid with log-odds</h2>
+  <div class="cols w-4-6">
+    <div style="font-size:0.75em">
+      $$l_i = \log\frac{p(m_i)}{1-p(m_i)}$$
+      $$l_i \leftarrow l_i + \underbrace{\log\frac{p(m_i\mid z_t)}{1-p(m_i\mid z_t)}}_{\text{inverse sensor model}} - l_0$$
+      <ul>
+        <li>cells on the ray: <em>free</em> (−0.4)</li>
+        <li>cell at the hit (0.1–1.5 m high): <strong>occupied</strong> (+0.85)</li>
+        <li>Bayes' rule becomes addition</li>
+      </ul>
+      <p class="small">Thrun, Burgard & Fox, <i>Probabilistic Robotics</i>, ch. 9. The floor plane comes from RANSAC (again).</p>
+    </div>
+    <img class="fig h460" src="assets/gen/d1_occupancy_build.gif">
+  </div>
+</section>
+
+<!-- ======================================================= 5 COLMAP -->
+<section class="outline-slide">
+  <h2><span class="kicker">Part 5 of 5</span>COLMAP, one stage at a time</h2>
+  <div class="cols w-6-4 top">
+  <div>
+  <div class="outline-label">Outline</div>
+  <ol class="outline">
+    <li>Two-view geometry</li>
+    <li>Visual odometry</li>
+    <li>The back-end: pose-graph optimisation</li>
+    <li>What does SLAM produce? A zoo of maps</li>
+    <li class="current">COLMAP, one stage at a time</li>
+  </ol>
+  </div>
+  <div class="sidebar"><h4>In this part</h4>
+  <ul class="inpart">
+    <li>The pipeline = notebooks 1–3 at scale</li>
+    <li>database.db and the match matrix</li>
+    <li>Incremental SfM, image by image</li>
+    <li>COLMAP from the command line</li>
+  </ul>
+  </div>
+  </div>
+  <div class="outline-nb">Notebook: <code>notebooks/day1_05_colmap_cli.py</code></div>
+</section>
+
+<section>
+  <h2><span class="kicker">Structure-from-Motion (Schönberger &amp; Frahm, CVPR 2016)</span>The pipeline = notebooks 1–3 at scale</h2>
+  <svg viewBox="0 0 1200 300" width="100%" height="340">
+    <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2328"/></marker></defs>
+    <g font-size="20">
+      <rect x="10" y="60" width="250" height="150" rx="2" fill="#fff" stroke="#2e6f73" stroke-width="1.6"/>
+      <text x="135" y="98" text-anchor="middle" font-family="monospace" font-weight="600" fill="#2e6f73">feature_extractor</text>
+      <text x="135" y="135" text-anchor="middle">SIFT per image</text><text x="135" y="165" text-anchor="middle" fill="#5a6472">camera guess (EXIF)</text>
+      <rect x="320" y="60" width="270" height="150" rx="2" fill="#fff" stroke="#2e6f73" stroke-width="1.6"/>
+      <text x="455" y="98" text-anchor="middle" font-family="monospace" font-weight="600" fill="#2e6f73">exhaustive_matcher</text>
+      <text x="455" y="135" text-anchor="middle">match all pairs</text><text x="455" y="165" text-anchor="middle" fill="#5a6472">RANSAC: E / F / H</text>
+      <rect x="650" y="20" width="330" height="230" rx="2" fill="#f8f5f3" stroke="#b0632f" stroke-width="1.6"/>
+      <text x="815" y="58" text-anchor="middle" font-family="monospace" font-weight="600" fill="#b0632f">mapper</text>
+      <text x="815" y="95" text-anchor="middle">1. init pair: E → triangulate</text>
+      <text x="815" y="128" text-anchor="middle">2. register next image: PnP</text>
+      <text x="815" y="161" text-anchor="middle">3. triangulate new points</text>
+      <text x="815" y="194" text-anchor="middle">4. bundle adjustment</text>
+      <text x="815" y="227" text-anchor="middle" fill="#5a6472">repeat 2–4</text>
+      <rect x="1030" y="60" width="160" height="150" rx="2" fill="#fff" stroke="#1f3a5f" stroke-width="1.6"/>
+      <text x="1110" y="98" text-anchor="middle" font-weight="600" fill="#1f3a5f">sparse/0</text>
+      <text x="1110" y="132" text-anchor="middle" font-size="17">cameras</text><text x="1110" y="158" text-anchor="middle" font-size="17">images</text><text x="1110" y="184" text-anchor="middle" font-size="17">points3D</text>
+      <line x1="262" y1="135" x2="316" y2="135" stroke="#1f2328" stroke-width="1.8" marker-end="url(#a4)"/>
+      <line x1="592" y1="135" x2="646" y2="135" stroke="#1f2328" stroke-width="1.8" marker-end="url(#a4)"/>
+      <line x1="982" y1="135" x2="1026" y2="135" stroke="#1f2328" stroke-width="1.8" marker-end="url(#a4)"/>
+      <text x="300" y="285" text-anchor="middle" fill="#5a6472" font-size="18">everything is stored in database.db (SQLite)</text>
+    </g>
+  </svg>
+  <p class="small">Installed from conda-forge (<code>conda install -c conda-forge colmap</code>; on Colab via micromamba). CPU is fine for sparse; dense MVS needs CUDA.</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Look inside</span>database.db and the match matrix</h2>
+  <div class="cols w-7-3">
+    <img class="fig h420" src="assets/gen/d1_nb_match_matrix.png">
+    <div style="font-size:0.72em">
+      <p>Tables: <code>cameras</code> · <code>images</code> · <code>keypoints</code> (N×6) · <code>descriptors</code> (N×128) · <code>matches</code> · <code>two_view_geometries</code></p>
+      <p>Pair id: \( \text{id} = i \cdot 2147483647 + j \)</p>
+      <p>Raw matches vs. geometrically verified matches show <strong>which images see the same part of the scene</strong>. This is the view graph.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="kicker"><code>mapper --Mapper.snapshot_frames_freq 1</code></span>Incremental SfM, image by image</h2>
+  <img class="fig h420" src="assets/gen/d1_colmap_growth.gif">
+  <div class="figcap"><span class="fignum">Fig. 11.</span> left: the image being added (green = its keypoints that are in the map) · right: the cloud from a fixed viewpoint, orange = points triangulated in this step · bottom: registered (green), just added (orange), not yet (grey)</div>
+  <p style="font-size:0.6em; margin-top:6px">Output files: <code>cameras.txt</code> (intrinsics) · <code>images.txt</code> (pose q, t as cam-from-world + 2D points) · <code>points3D.txt</code> (XYZ, colour, error, track). Camera centre \(\mathbf{C} = -R(q)^\top\mathbf{t}\).</p>
+</section>
+
+<section>
+  <h2><span class="kicker">Live on the laptop</span>COLMAP from the command line</h2>
+<pre><code><span class="c"># 1. features (SIFT)        (COLMAP 3.13; older: --SiftExtraction.use_gpu)</span>
+colmap feature_extractor  --database_path ws/database.db --image_path ws/images
+<span class="c"># 2. match all pairs + geometric verification</span>
+colmap exhaustive_matcher --database_path ws/database.db
+<span class="c"># 3. incremental SfM (init pair, PnP, triangulation, BA)</span>
+colmap mapper --database_path ws/database.db --image_path ws/images --output_path ws/sparse
+<span class="c"># 4. inspect / export</span>
+colmap model_analyzer  --path ws/sparse/0
+colmap model_converter --input_path ws/sparse/0 --output_path ws/txt --output_type TXT
+<span class="c"># 5. dense (CUDA): undistort -> PatchMatch stereo -> fusion</span>
+colmap image_undistorter  --image_path ws/images --input_path ws/sparse/0 --output_path ws/dense
+colmap patch_match_stereo --workspace_path ws/dense
+colmap stereo_fusion      --workspace_path ws/dense --output_path ws/dense/fused.ply
+<span class="c"># 6. look at it</span>
+colmap gui --database_path ws/database.db --image_path ws/images --import_path ws/sparse/0</code></pre>
+</section>
+
+<!-- ======================================================= BEYOND -->
+<section>
+  <h2><span class="kicker">Where the field is going</span>Learned SLAM and 3D foundation models</h2>
+  <div class="cols top">
+    <div>
+      <img class="fig h240" src="assets/papers/droid_slam.png">
+      <div class="figcap"><span class="fignum">Fig. 12.</span> DROID-SLAM: recurrent dense BA over learned flow (Teed &amp; Deng, NeurIPS 2021)</div>
+      <img class="fig h240" style="margin-top:12px" src="assets/papers/dust3r_pipeline.jpg">
+      <div class="figcap"><span class="fignum">Fig. 13.</span> DUSt3R: 2 images → point maps in one frame, no calibration (Wang et al., CVPR 2024)</div>
+    </div>
+    <div>
+      <img class="fig h300" src="assets/papers/mast3r_slam_teaser.gif">
+      <div class="figcap"><span class="fignum">Fig. 14.</span> MASt3R-SLAM: real-time dense SLAM on top of a 3D foundation model (Murai et al., CVPR 2025)</div>
+      <p style="font-size:0.66em">Same pieces: correspondences → poses → optimisation → map. They are now learned and dense.</p>
+    </div>
+  </div>
+  <div class="cite">Figures from the authors' public GitHub repositories: princeton-vl/DROID-SLAM, naver/dust3r, rmurai0610/MASt3R-SLAM.</div>
+</section>
+
+<section>
+  <h2>Takeaways</h2>
+  <div class="cols top">
+    <ul style="font-size:0.88em">
+      <li>Camera model + features + <strong>RANSAC</strong> → reliable matches</li>
+      <li><strong>E → (R, t)</strong> up to scale → triangulate → 3D</li>
+      <li>VO = init → <em>track (PnP)</em> → <em>map</em>, and it <strong>drifts</strong></li>
+      <li><strong>Loop closure + pose graph / BA</strong> = sparse least squares → a consistent map</li>
+      <li>One SLAM result, many maps: points · voxels · TSDF · <strong>occupancy grid</strong></li>
+      <li>COLMAP = all of the above, offline</li>
+    </ul>
+    <div class="sidebar">
+      <h4>Read more</h4>
+      <ol class="refs">
+        <li>Hartley &amp; Zisserman, <i>Multiple View Geometry</i> (ch. 9–12, 18)</li>
+        <li>Szeliski, <i>Computer Vision: Algorithms and Applications</i>, 2nd ed. (ch. 7, 11, 13)</li>
+        <li>Thrun, Burgard &amp; Fox, <i>Probabilistic Robotics</i> (ch. 9)</li>
+        <li>Barfoot, <i>State Estimation for Robotics</i></li>
+        <li>Grisetti et al., <i>A Tutorial on Graph-Based SLAM</i> (2010)</li>
+        <li>Cadena et al., <i>Past, Present, and Future of SLAM</i> (T-RO 2016)</li>
+        <li>Mur-Artal et al., ORB-SLAM (T-RO 2015) · Schönberger &amp; Frahm, COLMAP (CVPR 2016)</li>
+      </ol>
+    </div>
+  </div>
+  <p class="small" style="margin-top:16px"><strong>Day 2:</strong> localise in these maps (PnP, hloc) and plan paths in them (A*, OMPL).</p>
+</section>
+
+</div>
+<div class="deck-footer"><span>Visual Navigation · Hands-on session · Day 1: Mapping</span><span class="footer-right">Robotics Research Center, IIIT Hyderabad<img src="assets/logos/rrc_logo.png" alt="RRC"><img src="assets/logos/iiit_hyderabad_emblem.png" alt="IIIT Hyderabad"></span></div>
+</div>
+
+<script src="assets/lib/reveal/reveal.js"></script>
+<script src="assets/lib/reveal/plugin/math/math.js"></script>
+<script src="assets/lib/reveal/plugin/notes/notes.js"></script>
+<script src="assets/lib/reveal/plugin/zoom/zoom.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.05, hash: true, slideNumber: "c/t", center: false,
+    transition: "none", backgroundTransition: "none",
+    katex: { local: "assets/lib/katex", delimiters: [
+      { left: "$$", right: "$$", display: true }, { left: "\\(", right: "\\)", display: false } ] },
+    plugins: [ RevealMath.KaTeX, RevealNotes, RevealZoom ]
+  });
+  // running footer on every slide except the title slide
+  const footer = document.querySelector('.deck-footer');
+  const syncFooter = () => footer.classList.toggle('hidden', Reveal.getIndices().h === 0);
+  Reveal.on('ready', syncFooter); Reveal.on('slidechanged', syncFooter);
+</script>
+</body>
+</html>
